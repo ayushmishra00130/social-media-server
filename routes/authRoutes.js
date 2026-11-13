@@ -96,4 +96,55 @@ router.put('/profile', authMiddleware, async (req, res) => {
     }
 });
 
+// Get all users (except current logged-in user)
+router.get('/all', authMiddleware, async (req, res) => {
+    try {
+        const users = await User.find({ _id: { $ne: req.user.id } }).select('-password');
+        res.json(users);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Follow / Unfollow User Route
+router.put('/follow/:id', authMiddleware, async (req, res) => {
+    try {
+        const targetUserId = req.params.id;
+        const currentUserId = req.user.id;
+
+        if (targetUserId === currentUserId) {
+            return res.status(400).json({ message: "You cannot follow yourself." });
+        }
+
+        const targetUser = await User.findById(targetUserId);
+        const currentUser = await User.findById(currentUserId);
+
+        if (!targetUser || !currentUser) {
+            return res.status(404).json({ message: "User not found." });
+        }
+
+        const isFollowing = currentUser.following.includes(targetUserId);
+
+        if (isFollowing) {
+            // Unfollow
+            currentUser.following.pull(targetUserId);
+            targetUser.followers.pull(currentUserId);
+        } else {
+            // Follow
+            currentUser.following.push(targetUserId);
+            targetUser.followers.push(currentUserId);
+        }
+
+        await currentUser.save();
+        await targetUser.save();
+
+        res.json({
+            message: isFollowing ? "Unfollowed successfully" : "Followed successfully",
+            following: currentUser.following
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;
